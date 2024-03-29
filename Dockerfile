@@ -1,30 +1,21 @@
-# Use a base image with Node.js (Foundry VTT is a Node.js application)
+# Start from a base image for NodeJS 18
 FROM node:18
 
-# Set the working directory in the container
-WORKDIR /foundryvtt
+# Your application's Dockerfile commands here
+# For example, setting the working directory:
+WORKDIR /dockerize_foundryvtt
+
+RUN mkdir foundryvtt
 
 # Copy the FoundryVTT zip into the container
-COPY FoundryVTT-11.315.zip /foundryvtt
-
-# install nodejs
-# RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash &&\
-#     export NVM_DIR="$HOME/.nvm" &&\
-#     . ~/.bashrc &&\
-#     nvm install 18 &&\
-#     nvm use 18
-
-# Install unzip
-RUN apt-get update && \
-    apt-get install -y unzip && \
-    unzip FoundryVTT-11.315.zip && \
-    rm FoundryVTT-11.315.zip
+COPY /FoundryVTT-11.315/. /dockerize_foundryvtt/foundryvtt
 
 # Expose the port Foundry VTT runs on
 EXPOSE 30000
 
 # Set the volume for configuration and data persistence
-VOLUME /foundryvtt/Data
+# FoundryVTT doesnt like it when the data folder is in the same directory as the application
+VOLUME /dockerize_foundryvtt/data
 
 # Start Foundry VTT
-CMD ["node", "resources/app/main.js", "--dataPath=/foundryvtt/Data"]
+CMD ["node", "foundryvtt/resources/app/main.js", "--dataPath=/dockerize_foundryvtt/data"]
