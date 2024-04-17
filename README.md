@@ -4,10 +4,6 @@ I had originally created this as a guide for dockerizing foundryVTT and deployin
 
 I'm leaving the steps here for building the image and running the container on Docker Desktop.
 
-## Why use Docker?
-
-Granted, Foundry is pretty lightweight as a NodeJS application, and given that you'd have just over a handful of people accessing the application at the same time, it doesn't really need much in terms of scaling. But something an interviewer told me about Dockerizing got me thinking - once of the benefits of dockerizing and running containers is that you can scale horizontally by running multiple instances of a container ye? Well, what do we have on Foundry that it would be really nice if you could run concurrently? _Worlds_. We could run multiple worlds and have them store the world data on the same persistent volumes without having to hit the `Return to Setup` button in the Settings page.
-
 ## Things to Install
 
 ### NodeJS
@@ -53,24 +49,35 @@ For setting up the URL for the server, I used nginx to make a reverse DNS proxy.
 2. Rerun the Foundry image with this new network
 ```docker run -d -p 30000:30000 -v foundryvtt_data:/dockerize_foundryvtt/data --network foundry_network --name myfoundryvtt_container myfoundryvtt```
 
-3. Inspect the network you've created to get the `IPv4Address` of the foundry instance under the `Containers` values
-```docker network inspect foundry_network```
-
-It'll look something like this:
-```
-"Containers": {
-    "9c130b12f9c41be8b29c0a88c22de67019235363b8a406bd6e81c2bbaf792a6e": {
-        "Name": "myfoundryvtt_container",
-        "EndpointID": "92ef584986ec4ae6a628d0bc76c977b0d5b80bb9c0e35c0c90633574f43d4b7d",
-        "MacAddress": "02:42:ac:12:00:02",
-        "IPv4Address": "172.18.0.2/16",
-        "IPv6Address": ""
-    },
-```
-In this case, Foundry's address is `172.18.0.2`. Use this to update the `nginx.conf`, replacing the IP address in it.
-
-Navigate to the nginx_proxy folder and build the custom nginx image
+3. Navigate to the nginx_proxy folder and build the custom nginx image
 ```docker build -t my-custom-nginx .```
 
-Then run the container on the same network earlier.
+4. Then run the container on the same network earlier.
 ```docker run -d --name nginx-proxy   -p 80:80   --network foundry_network   my-custom-nginx```
+
+# Creating additional instances 
+
+Maybe you're like me and you want to run multiple worlds/campaigns concurrently. I've had mine set up so that campaigns and one-shots have their own instances and URLs, giving me and my players the ability to use and update content within the one-shot without impacting the campaign.
+
+I encountered a few inconveniences setting this up, so the solutions here aren't ideal, but they did get the job done. I would love to know what would've been a better way of doing them though!
+
+## Separate port
+
+Your device can't have multiple applications running and listening to the same port, so your second instance will have to be on a different port. Initially I had tried to do this by editing the `commons.js` and `config.mjs` files in the FoundryVTT-X.Y folder, but it turned out that it had no impact on the images I built as they still ran on 30000.
+
+In the end, what I did was 
+1. momentarily shut down the first instance of Foundry
+2. ran the second instance on 30000
+3. entered the license number, changed the port settings to 29999, saved
+4. stopped the second instance of foundry
+5. restart the second instance on 29999
+6. restart the first instance on 30000
+7. restart nginx 
+
+## Separate Volumes
+
+Unfortunately, you can't have both containers having write-access to the same persistent volumes - meaning that Docker doesn't have built-in strategies for locking the volumes for writing. For a quick and simple solution, I've created a separate volume for each container, though in future I'll be looking into how to give each container read-only access to each other's volumes so that players can use/copy data that is already present in the other volume.
+
+## Container must be running for docker resolver
+
+If you have two servers defined in your nginx file, each with proxy_pass pointing to a different container name, you'll need the containers to be running before you run the container, otherwise it fails and stops. It doesn't seem to complain as much if you run the nginx container and then stop one of the containers though (you'll get a Gateway Error for that container but the other one directs fine).
